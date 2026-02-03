@@ -483,6 +483,13 @@ class AceStepHandler:
                 raise FileNotFoundError(f"VAE checkpoint not found at {vae_checkpoint_path}")
 
             if compile_model:
+                # Add __len__ method to VAE to support torch.compile if needed
+                if not hasattr(self.vae.__class__, '__len__'):
+                    def vae_len(self):
+                        """Return 0 as default length for torch.compile compatibility"""
+                        return 0
+                    self.vae.__class__.__len__ = vae_len
+                
                 self.vae = torch.compile(self.vae)
             
             # 3. Load text encoder and tokenizer
