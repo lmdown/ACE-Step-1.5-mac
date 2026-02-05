@@ -90,6 +90,75 @@ class LLMHandler:
             Tuple of (gpu_memory_utilization_ratio, low_gpu_memory_mode)
         """
         try:
+            # Check for MPS availability first
+            if hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                device = torch.device("mps")
+                
+                try:
+                    import psutil
+                    # 动态获取系统总物理内存并转为 GB
+                    vm = psutil.virtual_memory()
+                    total_system_memory = vm.total / (1024**3)
+                    
+                    # 重点：Mac 是统一内存。
+                    # 建议将系统总内存的 75% 视为“可供模型分配的 GPU 空间”
+                    total_gpu = total_system_memory * 0.75
+                    
+                    low_gpu_memory_mode = False
+                    
+                    if model_path:
+                        ratio, target_memory_gb = get_lm_gpu_memory_ratio(model_path, total_gpu)
+                        logger.info(f"Adaptive LM memory allocation (MPS/M4): total_mem={total_system_memory:.1f}GB, target={target_memory_gb}GB, ratio={ratio:.3f}")
+                        
+                        # 对于 Mac 统一内存，如果可用总量太小（比如 8G 版 Mac），开启低功耗模式
+                        if total_system_memory < 12:
+                            low_gpu_memory_mode = True
+                            
+                        return ratio, low_gpu_memory_mode
+                    
+                    # Fallback logic for MPS
+                    available_gpu = total_gpu
+                    
+                    if total_gpu < minimal_gpu:
+                        minimal_gpu = 0.5 * total_gpu
+                        low_gpu_memory_mode = True
+                    
+                    if available_gpu >= minimal_gpu:
+                        ratio = min(max_ratio, max(min_ratio, minimal_gpu / total_gpu))
+                    else:
+                        ratio = min(max_ratio, max(min_ratio, (available_gpu * 0.8) / total_gpu))
+                    
+                    return ratio, low_gpu_memory_mode
+                except ImportError:
+                    # Fallback if psutil is not installed
+                    logger.warning("psutil not installed, using default MPS memory allocation")
+                    total_gpu = 16.0  # Assume 16GB for MPS
+                    
+                    low_gpu_memory_mode = False
+                    
+                    if model_path:
+                        ratio, target_memory_gb = get_lm_gpu_memory_ratio(model_path, total_gpu)
+                        logger.info(f"Adaptive LM memory allocation (MPS): model={model_path}, target={target_memory_gb}GB, ratio={ratio:.3f}, total_gpu={total_gpu:.1f}GB")
+                        
+                        if total_gpu < 8:
+                            low_gpu_memory_mode = True
+                            
+                        return ratio, low_gpu_memory_mode
+                    
+                    available_gpu = total_gpu * 0.8
+                    
+                    if total_gpu < minimal_gpu:
+                        minimal_gpu = 0.5 * total_gpu
+                        low_gpu_memory_mode = True
+                    
+                    if available_gpu >= minimal_gpu:
+                        ratio = min(max_ratio, max(min_ratio, minimal_gpu / total_gpu))
+                    else:
+                        ratio = min(max_ratio, max(min_ratio, (available_gpu * 0.8) / total_gpu))
+                    
+                    return ratio, low_gpu_memory_mode
+            
+            # Use CUDA if MPS is not available
             device = torch.device("cuda:0")
             total_gpu_mem_bytes = torch.cuda.get_device_properties(device).total_memory
             total_gpu = total_gpu_mem_bytes / 1024**3
@@ -99,7 +168,7 @@ class LLMHandler:
             # Use adaptive GPU memory ratio based on model size
             if model_path:
                 ratio, target_memory_gb = get_lm_gpu_memory_ratio(model_path, total_gpu)
-                logger.info(f"Adaptive LM memory allocation: model={model_path}, target={target_memory_gb}GB, ratio={ratio:.3f}, total_gpu={total_gpu:.1f}GB")
+                logger.info(f"Adaptive LM memory allocation (CUDA): model={model_path}, target={target_memory_gb}GB, ratio={ratio:.3f}, total_gpu={total_gpu:.1f}GB")
                 
                 # Enable low memory mode for small GPUs
                 if total_gpu < 8:
@@ -338,14 +407,32 @@ class LLMHandler:
                     device = "cuda"
                 elif hasattr(torch, 'xpu') and torch.xpu.is_available():
                     device = "xpu"
+                elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+                    device = "mps"
                 else:
                     device = "cpu"
 
             self.device = device
             self.offload_to_cpu = offload_to_cpu
-            # Set dtype based on device: bfloat16 for cuda, float32 for cpu
+            # Set dtype based on device: bfloat16 for cuda/xpu (if supported), float16 for mps, float32 for cpu
             if dtype is None:
-                self.dtype = torch.bfloat16 if device in ["cuda", "xpu"] else torch.float32
+                if device == "cuda":
+                    # Check CUDA compute capability: bfloat16 requires >=8.0 (Ampere+)
+                    if torch.cuda.is_available():
+                        prop = torch.cuda.get_device_properties(0)
+                        compute_capability = prop.major + prop.minor / 10
+                        if compute_capability >= 8.0:
+                            self.dtype = torch.bfloat16
+                        else:
+                            self.dtype = torch.float16
+                    else:
+                        self.dtype = torch.float16
+                elif device == "xpu":
+                    self.dtype = torch.bfloat16
+                elif device == "mps":
+                    self.dtype = torch.float16
+                else:
+                    self.dtype = torch.float32
             else:
                 self.dtype = dtype
 

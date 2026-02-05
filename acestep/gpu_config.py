@@ -142,6 +142,20 @@ def get_gpu_memory_gb() -> float:
             total_memory = torch.xpu.get_device_properties(0).total_memory
             memory_gb = total_memory / (1024**3)  # Convert bytes to GB
             return memory_gb
+        elif hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            # MPS doesn't expose memory directly, use system memory for Apple Silicon unified memory
+            try:
+                import psutil
+                # Get total system memory in GB
+                vm = psutil.virtual_memory()
+                total_system_memory = vm.total / (1024**3)
+                # Use 75% of system memory for MPS (unified memory)
+                return total_system_memory * 0.75
+            except ImportError:
+                # Fallback if psutil is not installed
+                logger.warning("psutil not installed, using default MPS memory allocation")
+                # Assume 16GB for modern Apple Silicon devices
+                return 16.0
         else:
             return 0
     except Exception as e:
