@@ -1,3 +1,31 @@
+# 中文说明
+
+我们对原项目仅做了一些简单的修改，提高兼容性：
+
+1. 支持macOS M系列芯片；
+2. 优化CUDA设备的检测，调整dtype参数；
+
+## 无需命令，一键安装
+
+推荐使用 魔当 (LM Downloader) https://seemts.com/ 一键安装。同时支持 Windows 和 macOS。
+
+在详情页右侧，可以看到不同模型的选项，根据你的需求选择合适的模型。
+<img src="./lm-downloader-detail-page.jpg" width="90%">
+
+## 源码运行
+
+```bash
+git clone https://github.com/lmdown/ACE-Step-1.5-mac
+cd ACE-Step-1.5-mac
+pip install -r requirements.txt
+
+python -m acestep.acestep_v15_pipeline
+```
+
+也可以参考原始的readme文档，使用官方推荐的安装和使用命令。
+
+-------
+
 <h1 align="center">ACE-Step 1.5</h1>
 <h1 align="center">Pushing the Boundaries of Open-Source Music Generation</h1>
 <p align="center">
