@@ -9,6 +9,7 @@ from acestep.gradio_ui.interfaces.generation import create_generation_section
 from acestep.gradio_ui.interfaces.result import create_results_section
 from acestep.gradio_ui.interfaces.training import create_training_section
 from acestep.gradio_ui.events import setup_event_handlers, setup_training_event_handlers
+from acestep.gradio_ui.events import generation_handlers as gen_h
 
 
 def create_gradio_interface(dit_handler, llm_handler, dataset_handler, init_params=None, language='en') -> gr.Blocks:
@@ -90,5 +91,47 @@ def create_gradio_interface(dit_handler, llm_handler, dataset_handler, init_para
         
         # Connect training event handlers
         setup_training_event_handlers(demo, dit_handler, llm_handler, training_section)
+        
+        # Add automatic initialization for base model on startup
+        service_pre_initialized = init_params is not None and init_params.get('pre_initialized', False)
+        if not service_pre_initialized:
+            # Check if default model is base
+            available_models = dit_handler.get_available_acestep_v15_models()
+            if "acestep-v15-base" in available_models:
+                # Trigger auto-initialization when demo loads
+                demo.load(
+                    # First update status to show initialization is starting
+                    fn=lambda: gr.update(value="Initializing base model..."),
+                    outputs=[generation_section["init_status"]]
+                ).then(
+                    # Simulate init_btn click with base model parameters
+                    fn=lambda *args: gen_h.init_service_wrapper(dit_handler, llm_handler, *args),
+                    inputs=[
+                        generation_section["checkpoint_dropdown"],
+                        generation_section["config_path"],
+                        generation_section["device"],
+                        generation_section["init_llm_checkbox"],
+                        generation_section["lm_model_path"],
+                        generation_section["backend_dropdown"],
+                        generation_section["use_flash_attention_checkbox"],
+                        generation_section["offload_to_cpu_checkbox"],
+                        generation_section["offload_dit_to_cpu_checkbox"],
+                        generation_section["compile_model_checkbox"],
+                        generation_section["quantization_checkbox"],
+                    ],
+                    outputs=[
+                        generation_section["init_status"], 
+                        generation_section["generate_btn"], 
+                        generation_section["service_config_accordion"],
+                        # Model type settings (updated based on actual loaded model)
+                        generation_section["inference_steps"],
+                        generation_section["guidance_scale"],
+                        generation_section["use_adg"],
+                        generation_section["shift"],
+                        generation_section["cfg_interval_start"],
+                        generation_section["cfg_interval_end"],
+                        generation_section["task_type"],
+                    ]
+                )
     
     return demo

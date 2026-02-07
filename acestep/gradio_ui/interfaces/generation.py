@@ -94,7 +94,8 @@ def create_generation_section(dit_handler, llm_handler, init_params=None, langua
             with gr.Row():
                 # Get available acestep-v15- model list
                 available_models = dit_handler.get_available_acestep_v15_models()
-                default_model = "acestep-v15-turbo" if "acestep-v15-turbo" in available_models else (available_models[0] if available_models else None)
+                # Default to base model if available, otherwise turbo, then first available
+                default_model = "acestep-v15-base" if "acestep-v15-base" in available_models else ("acestep-v15-turbo" if "acestep-v15-turbo" in available_models else (available_models[0] if available_models else None))
                 
                 # Set config_path value from init_params if pre-initialized
                 config_path_value = init_params.get('config_path', default_model) if service_pre_initialized else default_model
