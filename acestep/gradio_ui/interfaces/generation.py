@@ -2,6 +2,7 @@
 Gradio UI Generation Section Module
 Contains generation section component definitions
 """
+import sys
 import gradio as gr
 from acestep.constants import (
     VALID_LANGUAGES,
@@ -108,7 +109,7 @@ def create_generation_section(dit_handler, llm_handler, init_params=None, langua
                 # Set device value from init_params if pre-initialized
                 device_value = init_params.get('device', 'auto') if service_pre_initialized else 'auto'
                 device = gr.Dropdown(
-                    choices=["auto", "cuda", "xpu", "cpu"],
+                    choices=["auto", "cuda", "mps", "xpu", "cpu"],
                     value=device_value,
                     label=t("service.device_label"),
                     info=t("service.device_info")
@@ -130,7 +131,7 @@ def create_generation_section(dit_handler, llm_handler, init_params=None, langua
                 # Set backend value from init_params if pre-initialized
                 backend_value = init_params.get('backend', 'vllm') if service_pre_initialized else 'vllm'
                 backend_dropdown = gr.Dropdown(
-                    choices=["vllm", "pt"],
+                    choices=["vllm", "pt", "mlx"],
                     value=backend_value,
                     label=t("service.backend_label"),
                     info=t("service.backend_info")
@@ -146,7 +147,7 @@ def create_generation_section(dit_handler, llm_handler, init_params=None, langua
                     info=t("service.init_llm_info"),
                 )
                 # Auto-detect flash attention availability
-                flash_attn_available = dit_handler.is_flash_attention_available()
+                flash_attn_available = dit_handler.is_flash_attention_available(device_value)
                 # Set use_flash_attention value from init_params if pre-initialized
                 use_flash_attention_value = init_params.get('use_flash_attention', flash_attn_available) if service_pre_initialized else flash_attn_available
                 use_flash_attention_checkbox = gr.Checkbox(
@@ -176,8 +177,10 @@ def create_generation_section(dit_handler, llm_handler, init_params=None, langua
                     value=compile_model_value,
                     info=t("service.compile_model_info")
                 )
-                # Set quantization value from init_params if pre-initialized (default True for int8_weight_only)
-                quantization_value = init_params.get('quantization', True) if service_pre_initialized else True
+                # Set quantization value from init_params if pre-initialized.
+                # Default to False on macOS to avoid torchao incompatibilities.
+                default_quantization = False if sys.platform == "darwin" else True
+                quantization_value = init_params.get('quantization', default_quantization) if service_pre_initialized else default_quantization
                 quantization_checkbox = gr.Checkbox(
                     label=t("service.quantization_label"),
                     value=quantization_value,
@@ -820,4 +823,3 @@ def create_generation_section(dit_handler, llm_handler, init_params=None, langua
         "max_duration": max_duration,
         "max_batch_size": max_batch_size,
     }
-
