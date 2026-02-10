@@ -95,9 +95,10 @@ def create_gradio_interface(dit_handler, llm_handler, dataset_handler, init_para
         # Add automatic initialization for base model on startup
         service_pre_initialized = init_params is not None and init_params.get('pre_initialized', False)
         if not service_pre_initialized:
-            # Check if default model is base
+            # Check if default model is base - only auto-init if config_path specifies base model
             available_models = dit_handler.get_available_acestep_v15_models()
-            if "acestep-v15-base" in available_models:
+            config_path_value = init_params.get('config_path', '') if init_params else ''
+            if "acestep-v15-base" in available_models and "acestep-v15-base" in config_path_value:
                 # Trigger auto-initialization when demo loads
                 demo.load(
                     # First update status to show initialization is starting
